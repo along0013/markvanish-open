@@ -1,0 +1,4 @@
+﻿page,url,input_formats,output_formats,source
+home,https://markvanish.com/,"JPG, JPEG, PNG, WEBP, HEIC",PNG,site HTML fetched 2026-09-19
+remove-logo,https://markvanish.com/remove-logo-from-image/,"JPG, JPEG, PNG, WEBP, BMP, AVIF, HEIC, HEIF","PNG, JPEG, WebP",site HTML fetched 2026-09-19
+remove-text,https://markvanish.com/remove-text-from-image/,"JPG, JPEG, PNG, WEBP, HEIC",PNG,site HTML fetched 2026-09-19

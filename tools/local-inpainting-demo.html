@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local inpainting demo - no upload, no dependencies</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; max-width: 900px; color: #1b1f24; }
+  h1 { font-size: 18px; }
+  #stage { position: relative; display: inline-block; margin-top: 12px; }
+  canvas { border: 1px solid #c8ced6; display: block; cursor: crosshair; touch-action: none; }
+  .row { margin: 10px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { padding: 6px 12px; font: inherit; cursor: pointer; }
+  label { margin-right: 4px; }
+  .note { color: #5b6470; font-size: 13px; }
+  code { background: #eef1f5; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>Local inpainting demo</h1>
+<p class="note">
+  Select an image, paint over the region you want removed, then press <strong>Fill</strong>.
+  Everything runs in this page with the Canvas API. Nothing is uploaded.
+</p>
+
+<div class="row">
+  <input type="file" id="file" accept="image/*">
+  <label for="brush">Brush</label>
+  <input type="range" id="brush" min="4" max="80" value="24">
+  <span id="brushVal">24 px</span>
+</div>
+<div class="row">
+  <button id="fill">Fill</button>
+  <button id="reset">Clear mask</button>
+  <button id="save" disabled>Download PNG</button>
+  <span id="status" class="note"></span>
+</div>
+
+<div id="stage">
+  <canvas id="cv" width="640" height="420"></canvas>
+</div>
+
+<p class="note">
+  How it works: the painted pixels are marked unknown, then filled inward from the boundary.
+  Each pass replaces an unknown pixel with the average of its already-known neighbours, so
+  detail propagates from the edges of the region toward the centre. This is a single-scale
+  diffusion fill — it works well on short text, small marks, and simple textures, and it will
+  smear on large regions or strong gradients.
+</p>
+<p class="note">
+  HEIC/HEIF will not open in browsers that cannot decode it locally. That limitation is
+  intentional: adding server-side conversion would break the "no upload" property.
+</p>
+
+<script>
+(function () {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const fileEl = document.getElementById('file');
+  const brushEl = document.getElementById('brush');
+  const brushVal = document.getElementById('brushVal');
+  const statusEl = document.getElementById('status');
+  const fillBtn = document.getElementById('fill');
+  const resetBtn = document.getElementById('reset');
+  const saveBtn = document.getElementById('save');
+
+  let img = null;          // loaded image, drawn at natural size on a sized canvas
+  let mask = null;         // Uint8Array, 1 = to be filled
+  let drawing = false;
+  let scale = 1;           // display scale vs natural pixels
+
+  function setStatus(t) { statusEl.textContent = t; }
+
+  function loadImage(src) {
+    const im = new Image();
+    im.onload = function () {
+      const maxW = 900;
+      scale = Math.min(1, maxW / im.naturalWidth);
+      cv.width = Math.round(im.naturalWidth * scale);
+      cv.height = Math.round(im.naturalHeight * scale);
+      ctx.drawImage(im, 0, 0, cv.width, cv.height);
+      img = im;
+      mask = new Uint8Array(cv.width * cv.height);
+      saveBtn.disabled = false;
+      setStatus('Image loaded: ' + cv.width + 'x' + cv.height + '. Paint over the region, then press Fill.');
+    };
+    im.onerror = function () { setStatus('Could not decode this file in the browser.'); };
+    im.src = src;
+  }
+
+  fileEl.addEventListener('change', function (e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    loadImage(URL.createObjectURL(f));
+  });
+
+  canvasDragDrop();
+  function canvasDragDrop() {
+    cv.addEventListener('dragover', e => e.preventDefault());
+    cv.addEventListener('drop', function (e) {
+      e.preventDefault();
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) loadImage(URL.createObjectURL(f));
+    });
+  }
+
+  brushEl.addEventListener('input', function () { brushVal.textContent = brushEl.value + ' px'; });
+
+  function paintAt(x, y) {
+    const r = parseInt(brushEl.value, 10);
+    const d = ctx.getImageData(0, 0, cv.width, cv.height);
+    const px = d.data;
+    for (let yy = Math.max(0, y - r); yy <= Math.min(cv.height - 1, y + r); yy++) {
+      for (let xx = Math.max(0, x - r); xx <= Math.min(cv.width - 1, x + r); xx++) {
+        const dx = xx - x, dy = yy - y;
+        if (dx * dx + dy * dy > r * r) continue;
+        const i = yy * cv.width + xx;
+        mask[i] = 1;
+        // red overlay so the selection is visible
+        px[i * 4] = 255; px[i * 4 + 1] = 60; px[i * 4 + 2] = 60;
+      }
+    }
+    ctx.putImageData(d, 0, 0);
+  }
+
+  function pos(e) {
+    const rect = cv.getBoundingClientRect();
+    return {
+      x: Math.round((e.clientX - rect.left) * (cv.width / rect.width)),
+      y: Math.round((e.clientY - rect.top) * (cv.height / rect.height))
+    };
+  }
+
+  cv.addEventListener('pointerdown', function (e) {
+    if (!mask) return;
+    drawing = true; cv.setPointerCapture(e.pointerId);
+    paintAt(pos(e).x, pos(e).y);
+  });
+  cv.addEventListener('pointermove', function (e) {
+    if (!drawing) return;
+    const p = pos(e); paintAt(p.x, p.y);
+  });
+  cv.addEventListener('pointerup', function () { drawing = false; });
+
+  resetBtn.addEventListener('click', function () {
+    if (!img) return;
+    mask = new Uint8Array(cv.width * cv.height);
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    setStatus('Mask cleared.');
+  });
+
+  fillBtn.addEventListener('click', function () {
+    if (!mask) { setStatus('Load an image first.'); return; }
+    let unknown = 0;
+    for (let i = 0; i < mask.length; i++) if (mask[i]) unknown++;
+    if (!unknown) { setStatus('Nothing selected.'); return; }
+
+    setStatus('Filling ' + unknown.toLocaleString() + ' pixels...');
+    setTimeout(function () {
+      const t0 = performance.now();
+      // Redraw clean image, then fill from the boundary inward.
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      const d = ctx.getImageData(0, 0, cv.width, cv.height);
+      const px = d.data;
+      const w = cv.width, h = cv.height;
+
+      let frontier = [];
+      for (let i = 0; i < mask.length; i++) if (mask[i]) frontier.push(i);
+
+      // Progressive diffusion: repeat passes; a pixel becomes known once it has
+      // at least one known 4-neighbour, taking the average of the known ones.
+      const known = new Uint8Array(mask.length);
+      for (let i = 0; i < mask.length; i++) known[i] = mask[i] ? 0 : 1;
+
+      let remaining = frontier.length;
+      let passes = 0;
+      while (remaining > 0 && passes < 4000) {
+        passes++;
+        const next = [];
+        for (let k = 0; k < frontier.length; k++) {
+          const i = frontier[k];
+          const x = i % w, y = (i - x) / w;
+          let r = 0, g = 0, b = 0, n = 0;
+          if (x > 0 && known[i - 1]) { r += px[(i - 1) * 4]; g += px[(i - 1) * 4 + 1]; b += px[(i - 1) * 4 + 2]; n++; }
+          if (x < w - 1 && known[i + 1]) { r += px[(i + 1) * 4]; g += px[(i + 1) * 4 + 1]; b += px[(i + 1) * 4 + 2]; n++; }
+          if (y > 0 && known[i - w]) { r += px[(i - w) * 4]; g += px[(i - w) * 4 + 1]; b += px[(i - w) * 4 + 2]; n++; }
+          if (y < h - 1 && known[i + w]) { r += px[(i + w) * 4]; g += px[(i + w) * 4 + 1]; b += px[(i + w) * 4 + 2]; n++; }
+          if (n > 0) {
+            px[i * 4] = r / n; px[i * 4 + 1] = g / n; px[i * 4 + 2] = b / n;
+            known[i] = 1; remaining--;
+          } else {
+            next.push(i);
+          }
+        }
+        frontier = next;
+        if (frontier.length === 0) break;
+      }
+
+      ctx.putImageData(d, 0, 0);
+      for (let i = 0; i < mask.length; i++) mask[i] = 0;
+      setStatus('Filled in ' + Math.round(performance.now() - t0) + ' ms over ' + passes + ' passes.');
+    }, 20);
+  });
+
+  saveBtn.addEventListener('click', function () {
+    const a = document.createElement('a');
+    a.download = 'cleaned.png';
+    a.href = cv.toDataURL('image/png');
+    a.click();
+  });
+})();
+</script>
+</body>
+</html>
