@@ -41,11 +41,12 @@
 </div>
 
 <p class="note">
-  How it works: the painted pixels are marked unknown, then filled inward from the boundary.
-  Each pass replaces an unknown pixel with the average of its already-known neighbours, so
-  detail propagates from the edges of the region toward the centre. This is a single-scale
-  diffusion fill — it works well on short text, small marks, and simple textures, and it will
-  smear on large regions or strong gradients.
+  How it works: the painted pixels are marked unknown, then each pass replaces an unknown pixel
+  with the average of the neighbours that are known at that moment. Pixels are visited in row
+  order and marked known immediately, so a single pass already sweeps across most of a region —
+  the pass count in the status line shows when that happens. This is a single-scale diffusion
+  fill: it works well on short text, small marks, and simple textures, and it will smear on
+  large regions or strong gradients.
 </p>
 <p class="note">
   HEIC/HEIF will not open in browsers that cannot decode it locally. That limitation is
@@ -167,8 +168,11 @@
       let frontier = [];
       for (let i = 0; i < mask.length; i++) if (mask[i]) frontier.push(i);
 
-      // Progressive diffusion: repeat passes; a pixel becomes known once it has
-      // at least one known 4-neighbour, taking the average of the known ones.
+      // Progressive diffusion: a pixel becomes known once it has at least one known
+      // 4-neighbour, taking the average of the known ones. `known` is updated in place,
+      // so a pixel can read neighbours filled moments earlier in the same sweep (row
+      // order, left to right). That is why the pass count stays low: this is a
+      // Gauss-Seidel style fill rather than a strictly boundary-to-centre one.
       const known = new Uint8Array(mask.length);
       for (let i = 0; i < mask.length; i++) known[i] = mask[i] ? 0 : 1;
 
