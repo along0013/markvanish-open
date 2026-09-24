@@ -1,4 +1,4 @@
-﻿page,url,input_formats,output_formats,canvas_cap_px,notes,verified,source
+page,url,input_formats,output_formats,canvas_cap_px,notes,verified,source
 home,https://markvanish.com/,"JPG, JPEG, PNG, WEBP, HEIC",PNG,1800,"HEIC/HEIF listed with no caveat even though decoding is device-dependent. Page does not state the canvas cap.",2026-09-24,"site HTML fetched 2026-09-19; page HTML and /app.js re-fetched 2026-09-24"
 remove-logo,https://markvanish.com/remove-logo-from-image/,"JPG, JPEG, PNG, WEBP, BMP, AVIF, HEIC, HEIF","PNG, JPEG, WebP",2400,"Page discloses both the HEIC/HEIF caveat and the canvas cap. BMP and AVIF rely on browser decoding; output format is selectable before download.",2026-09-24,"site HTML fetched 2026-09-19; page HTML and /remove-logo-from-image/logo-removal.js re-fetched 2026-09-24"
 remove-text,https://markvanish.com/remove-text-from-image/,"JPG, JPEG, PNG, WEBP, HEIC",PNG,1800,"Page discloses the 1800 px canvas cap. HEIC listed with no caveat.",2026-09-24,"site HTML fetched 2026-09-19; page HTML and /app.js re-fetched 2026-09-24"
